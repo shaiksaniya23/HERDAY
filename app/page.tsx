@@ -1,69 +1,403 @@
-import Image from "next/image";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { supabase } from "@/app/lib/supabaseClient";
 
 export default function Home() {
+  const router = useRouter();
+
+  const [isSignup, setIsSignup] = useState(false);
+
+  // SIGN IN STATES
+  const [signinEmail, setSigninEmail] = useState("");
+  const [signinPassword, setSigninPassword] = useState("");
+  const [signinLoading, setSigninLoading] = useState(false);
+  const [signinError, setSigninError] = useState("");
+
+  // SIGN UP STATES
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState("");
+  const [signupSuccess, setSignupSuccess] = useState("");
+
+  // =========================
+  // SIGN IN
+  // =========================
+
+  const handleSignIn = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+
+    setSigninError("");
+    setSigninLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: signinEmail,
+      password: signinPassword,
+    });
+
+    setSigninLoading(false);
+
+    if (error) {
+      setSigninError(error.message);
+      return;
+    }
+
+    router.push("/dashboard");
+  };
+
+  // =========================
+  // SIGN UP
+  // =========================
+
+  const handleSignUp = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+
+    setSignupError("");
+    setSignupSuccess("");
+    setSignupLoading(true);
+
+    const { data, error } = await supabase.auth.signUp({
+      email: signupEmail,
+      password: signupPassword,
+      options: {
+        data: {
+          name: signupName,
+        },
+      },
+    });
+
+    setSignupLoading(false);
+
+    if (error) {
+      setSignupError(error.message);
+      return;
+    }
+
+    /*
+      If email confirmation is enabled in Supabase,
+      session will be null until the user confirms
+      their email.
+    */
+
+    if (data.session) {
+      router.push("/dashboard");
+      return;
+    }
+
+    setSignupSuccess(
+      "Account created! Please check your email to confirm your account."
+    );
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="login-page">
+
+      <div className={`login-card ${isSignup ? "signup-mode" : ""}`}>
+
+        {/* =========================
+            SIGN IN
+        ========================= */}
+
+        <section className="auth-form signin-form">
+
+          <div className="herday-small">
+            HERDAY
+          </div>
+
+          <h1>Welcome Back ♡</h1>
+
+          <p className="subtitle">
+            Sign in to continue your journey.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+          <form onSubmit={handleSignIn}>
+
+            <label htmlFor="signin-email">
+              Email
+            </label>
+
+            <input
+              id="signin-email"
+              type="email"
+              placeholder="Enter your email"
+              value={signinEmail}
+              onChange={(e) =>
+                setSigninEmail(e.target.value)
+              }
+              required
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+            <label htmlFor="signin-password">
+              Password
+            </label>
+
+            <input
+              id="signin-password"
+              type="password"
+              placeholder="Enter your password"
+              value={signinPassword}
+              onChange={(e) =>
+                setSigninPassword(e.target.value)
+              }
+              required
+            />
+
+            <div className="forgot">
+              <a href="/forgot-password">
+                Forgot password?
+              </a>
+            </div>
+
+            {signinError && (
+              <p
+                style={{
+                  color: "#306D29",
+                  fontSize: "14px",
+                  marginTop: "8px",
+                  marginBottom: "8px",
+                }}
+              >
+                {signinError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="auth-button"
+              disabled={signinLoading}
+            >
+              <span>
+                {signinLoading
+                  ? "SIGNING IN..."
+                  : "SIGN IN"}
+              </span>
+
+              {!signinLoading && (
+                <span className="arrow">
+                  →
+                </span>
+              )}
+            </button>
+
+          </form>
+
+          <div className="or">
+            <span />
+            <p>or</p>
+            <span />
+          </div>
+
+          <button
+            type="button"
+            className="google-button"
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <span className="google-icon">
+              G
+            </span>
+
+            Continue with Google
+          </button>
+
+          <p className="switch-text">
+
+            Don't have an account?
+
+            <button
+              type="button"
+              onClick={() => {
+                setSigninError("");
+                setIsSignup(true);
+              }}
+            >
+              Sign up
+            </button>
+
+          </p>
+
+        </section>
+
+
+        {/* =========================
+            SIGN UP
+        ========================= */}
+
+        <section className="auth-form signup-form">
+
+          <div className="herday-small">
+            HERDAY
+          </div>
+
+          <h1>Create Account ♡</h1>
+
+          <p className="subtitle">
+            Start organizing your future.
+          </p>
+
+          <form onSubmit={handleSignUp}>
+
+            <label htmlFor="signup-name">
+              Name
+            </label>
+
+            <input
+              id="signup-name"
+              type="text"
+              placeholder="Your name"
+              value={signupName}
+              onChange={(e) =>
+                setSignupName(e.target.value)
+              }
+              required
+            />
+
+            <label htmlFor="signup-email">
+              Email
+            </label>
+
+            <input
+              id="signup-email"
+              type="email"
+              placeholder="Enter your email"
+              value={signupEmail}
+              onChange={(e) =>
+                setSignupEmail(e.target.value)
+              }
+              required
+            />
+
+            <label htmlFor="signup-password">
+              Password
+            </label>
+
+            <input
+              id="signup-password"
+              type="password"
+              placeholder="Create a password"
+              value={signupPassword}
+              onChange={(e) =>
+                setSignupPassword(e.target.value)
+              }
+              required
+            />
+
+            {signupError && (
+              <p
+                style={{
+                  color: "#306D29",
+                  fontSize: "14px",
+                  marginTop: "8px",
+                  marginBottom: "8px",
+                }}
+              >
+                {signupError}
+              </p>
+            )}
+
+            {signupSuccess && (
+              <p
+                style={{
+                  color: "#306D29",
+                  fontSize: "14px",
+                  marginTop: "8px",
+                  marginBottom: "8px",
+                }}
+              >
+                {signupSuccess}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="auth-button"
+              disabled={signupLoading}
+            >
+              <span>
+                {signupLoading
+                  ? "CREATING..."
+                  : "SIGN UP"}
+              </span>
+
+              {!signupLoading && (
+                <span className="arrow">
+                  →
+                </span>
+              )}
+            </button>
+
+          </form>
+
+          <div className="or">
+            <span />
+            <p>or</p>
+            <span />
+          </div>
+
+          <button
+            type="button"
+            className="google-button"
+          >
+            <span className="google-icon">
+              G
+            </span>
+
+            Continue with Google
+          </button>
+
+          <p className="switch-text">
+
+            Already have an account?
+
+            <button
+              type="button"
+              onClick={() => {
+                setSignupError("");
+                setSignupSuccess("");
+                setIsSignup(false);
+              }}
+            >
+              Sign in
+            </button>
+
+          </p>
+
+        </section>
+
+
+        {/* =========================
+            HERDAY BRAND PANEL
+        ========================= */}
+
+        <section className="brand-panel">
+
+          <div className="brand-content">
+
+            <div className="brand-symbol">
+              ✦
+            </div>
+
+            <h2>
+              HERDAY
+            </h2>
+
+            <p>
+              Your opportunities.
+              <br />
+              Your next step.
+            </p>
+
+          </div>
+
+        </section>
+
+      </div>
+
+    </main>
   );
 }
