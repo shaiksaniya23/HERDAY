@@ -20,7 +20,6 @@ type Plan = {
   tasks: PlanTask[];
   hours: number;
   plannedDate: string;
-  plannedTime: string;
   reminder: string;
 };
 
@@ -35,7 +34,6 @@ const emptyForm = {
   tasks: [""],
   hours: "2",
   plannedDate: "",
-  plannedTime: "18:00",
   reminder: "24 hours before",
 };
 
@@ -141,14 +139,20 @@ function convertSupabasePlan(
     deadlineDate:
       Number.isNaN(deadline.getTime())
         ? ""
-        : deadline.toISOString().slice(0, 10),
+        : `${deadline.getFullYear()}-${String(
+            deadline.getMonth() + 1
+          ).padStart(2, "0")}-${String(
+            deadline.getDate()
+          ).padStart(2, "0")}`,
 
     deadlineTime:
       Number.isNaN(deadline.getTime())
         ? "23:59"
-        : deadline
-            .toISOString()
-            .slice(11, 16),
+        : `${String(
+            deadline.getHours()
+          ).padStart(2, "0")}:${String(
+            deadline.getMinutes()
+          ).padStart(2, "0")}`,
 
     tasks: normalizePlans([
       {
@@ -164,13 +168,6 @@ function convertSupabasePlan(
 
     plannedDate:
       databasePlan.planned_date || "",
-
-    plannedTime:
-      databasePlan.planned_time
-        ? String(
-            databasePlan.planned_time
-          ).slice(0, 5)
-        : "18:00",
 
     reminder,
   };
@@ -229,38 +226,27 @@ export default function Dashboard() {
   const [savedMessage, setSavedMessage] =
     useState("");
 
+  const [savingPlan, setSavingPlan] =
+    useState(false);
+
+  const [currentHour, setCurrentHour] =
+    useState(() => new Date().getHours());
+
   /* =========================================
-     LOAD PLANS
+     LOAD PLANS — SUPABASE IS THE SOURCE OF TRUTH
      ========================================= */
 
   useEffect(() => {
     const loadPlans = async () => {
-      /*
-        First get whatever is already saved
-        locally. This protects your existing
-        dashboard data.
-      */
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      const savedPlans =
-        localStorage.getItem(STORAGE_KEY);
-
-      let localPlans: Plan[] = [];
-
-      if (savedPlans) {
-        try {
-          const parsedPlans =
-            JSON.parse(savedPlans);
-
-          localPlans =
-            normalizePlans(parsedPlans);
-        } catch {
-          localPlans = [];
-        }
+      if (!user) {
+        setPlans([]);
+        localStorage.removeItem(STORAGE_KEY);
+        return;
       }
-
-      /*
-        Now try to load plans from Supabase.
-      */
 
       const {
         data: databasePlans,
@@ -268,51 +254,75 @@ export default function Dashboard() {
       } = await supabase
         .from("plans")
         .select("*")
+        .eq("user_id", user.id)
         .order("created_at", {
           ascending: false,
         });
 
-      /*
-        If Supabase has plans, use them.
-      */
-
-      if (
-        !error &&
-        databasePlans &&
-        databasePlans.length > 0
-      ) {
-        const convertedPlans =
-          databasePlans.map(
-            convertSupabasePlan
-          );
-
-        setPlans(convertedPlans);
-
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(
-            convertedPlans
-          )
+      if (error) {
+        console.error(
+          "HERDAY plan load error:",
+          error
         );
 
+        setSavedMessage(
+          `Could not load your plans: ${error.message}`
+        );
         return;
       }
 
       /*
-        If Supabase doesn't have plans yet,
-        keep the existing local plans.
+        IMPORTANT:
+        An empty Supabase result means the user really has
+        no plans. We MUST NOT restore old localStorage data.
+        This is what makes Settings → Clear Data actually stay cleared.
       */
 
-      setPlans(localPlans);
+      const convertedPlans =
+        (databasePlans || []).map(
+          convertSupabasePlan
+        );
+
+      setPlans(convertedPlans);
 
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify(localPlans)
+        JSON.stringify(convertedPlans)
       );
     };
 
     loadPlans();
+
+    /*
+      If Settings clears data while another HERDAY page is open,
+      reload the dashboard from Supabase instead of keeping stale data.
+    */
+    const reloadAfterClear = () => {
+      loadPlans();
+    };
+
+    window.addEventListener(
+      "herday-data-cleared",
+      reloadAfterClear
+    );
+
+    return () => {
+      window.removeEventListener(
+        "herday-data-cleared",
+        reloadAfterClear
+      );
+    };
   }, []);
+
+  /* Keep the greeting correct if the page stays open across noon/5 PM. */
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentHour(new Date().getHours());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
 
   /* =========================================
      SAVE PLANS LOCALLY
@@ -415,215 +425,143 @@ export default function Dashboard() {
   ) => {
     e.preventDefault();
 
+    if (savingPlan) return;
+
     setSavedMessage("");
 
-    const cleanedTasks =
-      form.tasks
-        .map((task) =>
-          task.trim()
-        )
-        .filter(Boolean)
-        .map(
-          (task, index) => ({
-            id: `${Date.now()}-task-${index}`,
-            title: task,
-            completed: false,
-          })
-        );
+    const name = form.name.trim();
+    const organization = form.organization.trim();
 
-    if (
-      !form.name.trim() ||
-      !form.organization.trim() ||
-      !form.deadlineDate
-    ) {
+    if (!name || !organization || !form.deadlineDate) {
+      setSavedMessage(
+        "Please fill in the application name, organization and deadline."
+      );
       return;
     }
 
-    /*
-      Get the currently logged-in
-      HERDAY user.
-    */
+    const deadline = new Date(
+      `${form.deadlineDate}T${form.deadlineTime}`
+    );
+
+    if (Number.isNaN(deadline.getTime())) {
+      setSavedMessage("Please enter a valid deadline.");
+      return;
+    }
 
     const {
-      data: {
-        user,
-      },
+      data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) {
-      setSavedMessage(
-        "Please sign in again before saving a plan."
-      );
+      setSavedMessage("Please sign in again before saving a plan.");
       return;
     }
 
-    /*
-      Convert reminder selection
-      into three database booleans.
-    */
+    const cleanedTasks = form.tasks
+      .map((task) => task.trim())
+      .filter(Boolean)
+      .map((task, index) => ({
+        id: `${Date.now()}-task-${index}`,
+        title: task,
+        completed: false,
+      }));
 
     const reminder24h =
-      form.reminder ===
-        "24 hours before" ||
-      form.reminder ===
-        "24 and 6 hours before" ||
-      form.reminder ===
-        "24, 6 and 1 hour before";
+      form.reminder === "24 hours before" ||
+      form.reminder === "24 and 6 hours before" ||
+      form.reminder === "24, 6 and 1 hour before";
 
     const reminder6h =
-      form.reminder ===
-        "6 hours before" ||
-      form.reminder ===
-        "24 and 6 hours before" ||
-      form.reminder ===
-        "24, 6 and 1 hour before";
+      form.reminder === "6 hours before" ||
+      form.reminder === "24 and 6 hours before" ||
+      form.reminder === "24, 6 and 1 hour before";
 
     const reminder1h =
-      form.reminder ===
-        "1 hour before" ||
-      form.reminder ===
-        "24, 6 and 1 hour before";
+      form.reminder === "1 hour before" ||
+      form.reminder === "24, 6 and 1 hour before";
 
-    /*
-      Convert date + time into a
-      proper timestamp for Supabase.
-    */
+    setSavingPlan(true);
 
-    const deadline =
-      new Date(
-        `${form.deadlineDate}T${form.deadlineTime}`
+    try {
+      const {
+        data: insertedPlan,
+        error,
+      } = await supabase
+        .from("plans")
+        .insert({
+          user_id: user.id,
+          title: name,
+          organization,
+          type: form.type,
+          deadline: deadline.toISOString(),
+          estimated_hours: Number(form.hours) || 0,
+          planned_date: form.plannedDate || null,
+          reminder_24h: reminder24h,
+          reminder_6h: reminder6h,
+          reminder_1h: reminder1h,
+          tasks: cleanedTasks,
+        })
+        .select("*")
+        .single();
+
+      if (error || !insertedPlan) {
+        console.error("HERDAY plan save error:", error);
+        setSavedMessage(
+          `Could not save plan: ${error?.message || "No plan was returned by Supabase."}`
+        );
+        return;
+      }
+
+      const newPlan = convertSupabasePlan(insertedPlan);
+      const updatedPlans = [...plans, newPlan];
+
+      setPlans(updatedPlans);
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(updatedPlans)
       );
 
-    if (
-      Number.isNaN(
-        deadline.getTime()
-      )
-    ) {
-      setSavedMessage(
-        "Please enter a valid deadline."
-      );
-      return;
+      setSavedMessage("Plan saved successfully ♡");
+
+      window.setTimeout(() => {
+        closePlanForm();
+      }, 700);
+    } finally {
+      setSavingPlan(false);
     }
-
-    /*
-      INSERT INTO SUPABASE
-    */
-
-    const {
-      data: insertedPlan,
-      error,
-    } = await supabase
-      .from("plans")
-      .insert({
-        user_id: user.id,
-
-        title:
-          form.name.trim(),
-
-        organization:
-          form.organization.trim(),
-
-        type:
-          form.type,
-
-        deadline:
-          deadline.toISOString(),
-
-        estimated_hours:
-          Number(form.hours) || 0,
-
-        planned_date:
-          form.plannedDate || null,
-
-        planned_time:
-          form.plannedTime || null,
-
-        reminder_24h:
-          reminder24h,
-
-        reminder_6h:
-          reminder6h,
-
-        reminder_1h:
-          reminder1h,
-
-        tasks:
-          cleanedTasks,
-      })
-      .select()
-      .single();
-
-    /*
-      If Supabase rejects the plan,
-      don't add it locally.
-    */
-
-    if (error) {
-      console.error(
-        "HERDAY plan save error:",
-        error
-      );
-
-      setSavedMessage(
-        `Could not save plan: ${error.message}`
-      );
-
-      return;
-    }
-
-    /*
-      Convert the Supabase row back
-      into HERDAY's normal Plan format.
-    */
-
-    const newPlan =
-      convertSupabasePlan(
-        insertedPlan
-      );
-
-    const updatedPlans = [
-      ...plans,
-      newPlan,
-    ];
-
-    savePlans(updatedPlans);
-
-    setSavedMessage(
-      "Plan saved successfully ♡"
-    );
-
-    setTimeout(() => {
-      closePlanForm();
-    }, 900);
   };
 
   /* =========================================
      DELETE PLAN
      ========================================= */
 
-  const deletePlan = async (
-    id: string
-  ) => {
+  const deletePlan = async (id: string) => {
     const {
-      error,
-    } = await supabase
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSavedMessage("Please sign in again before deleting a plan.");
+      return;
+    }
+
+    const { error } = await supabase
       .from("plans")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user.id);
 
     if (error) {
-      console.error(
-        "HERDAY delete error:",
-        error
+      console.error("HERDAY delete error:", error);
+      setSavedMessage(
+        `Could not delete plan: ${error.message}`
       );
       return;
     }
 
-    const updatedPlans =
-      plans.filter(
-        (plan) =>
-          plan.id !== id
-      );
+    const updatedPlans = plans.filter(
+      (plan) => plan.id !== id
+    );
 
     savePlans(updatedPlans);
   };
@@ -636,65 +574,48 @@ export default function Dashboard() {
     planId: string,
     taskId: string
   ) => {
-    const updatedPlans =
-      plans.map((plan) => {
-        if (plan.id !== planId) {
-          return plan;
-        }
+    const changedPlan = plans.find(
+      (plan) => plan.id === planId
+    );
 
-        return {
-          ...plan,
+    if (!changedPlan) return;
 
-          tasks: plan.tasks.map(
-            (task) => {
-              if (
-                task.id !== taskId
-              ) {
-                return task;
-              }
-
-              return {
-                ...task,
-                completed:
-                  !task.completed,
-              };
-            }
-          ),
-        };
-      });
-
-    const changedPlan =
-      updatedPlans.find(
-        (plan) =>
-          plan.id === planId
-      );
-
-    if (!changedPlan) {
-      return;
-    }
-
-    /*
-      Update the entire task JSON
-      inside Supabase.
-    */
+    const updatedTasks = changedPlan.tasks.map(
+      (task) =>
+        task.id === taskId
+          ? { ...task, completed: !task.completed }
+          : task
+    );
 
     const {
-      error,
-    } = await supabase
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSavedMessage("Please sign in again before updating a task.");
+      return;
+    }
+
+    const { error } = await supabase
       .from("plans")
-      .update({
-        tasks:
-          changedPlan.tasks,
-      })
-      .eq("id", planId);
+      .update({ tasks: updatedTasks })
+      .eq("id", planId)
+      .eq("user_id", user.id);
 
     if (error) {
-      console.error(
-        "HERDAY task update error:",
-        error
+      console.error("HERDAY task update error:", error);
+      setSavedMessage(
+        `Could not update task: ${error.message}`
       );
       return;
     }
+
+    const updatedPlans = plans.map(
+      (plan) =>
+        plan.id === planId
+          ? { ...plan, tasks: updatedTasks }
+          : plan
+    );
 
     savePlans(updatedPlans);
   };
@@ -716,6 +637,13 @@ export default function Dashboard() {
      ========================================= */
 
   const today = getTodayString();
+
+  const greeting =
+    currentHour < 12
+      ? "Good morning"
+      : currentHour < 17
+      ? "Good afternoon"
+      : "Good evening";
 
   const todayPlans =
     useMemo(() => {
@@ -950,7 +878,7 @@ export default function Dashboard() {
             </p>
 
             <h1>
-              Good morning{" "}
+              {greeting}{" "}
               <span>♡</span>
             </h1>
 
@@ -1191,6 +1119,12 @@ export default function Dashboard() {
                             ⏰{" "}
                             {plan.deadlineTime}
                           </span>
+
+                          {plan.plannedDate && (
+                            <span>
+                              🗓️ Work: {plan.plannedDate}
+                            </span>
+                          )}
 
                         </div>
 
@@ -1667,45 +1601,23 @@ export default function Dashboard() {
                 When do you plan to work on it?
               </div>
 
-              <div className="form-two-columns">
+              <label>
+                Work date
 
-                <label>
-                  Work date
+                <input
+                  type="date"
+                  value={
+                    form.plannedDate
+                  }
+                  onChange={(e) =>
+                    updateForm(
+                      "plannedDate",
+                      e.target.value
+                    )
+                  }
+                />
 
-                  <input
-                    type="date"
-                    value={
-                      form.plannedDate
-                    }
-                    onChange={(e) =>
-                      updateForm(
-                        "plannedDate",
-                        e.target.value
-                      )
-                    }
-                  />
-
-                </label>
-
-                <label>
-                  Start time
-
-                  <input
-                    type="time"
-                    value={
-                      form.plannedTime
-                    }
-                    onChange={(e) =>
-                      updateForm(
-                        "plannedTime",
-                        e.target.value
-                      )
-                    }
-                  />
-
-                </label>
-
-              </div>
+              </label>
 
               {/* REMINDER */}
 
@@ -1763,9 +1675,10 @@ export default function Dashboard() {
               <button
                 type="submit"
                 className="save-plan-button"
+                disabled={savingPlan}
               >
-                SAVE PLAN
-                <span>→</span>
+                {savingPlan ? "SAVING..." : "SAVE PLAN"}
+                {!savingPlan && <span>→</span>}
               </button>
 
             </form>

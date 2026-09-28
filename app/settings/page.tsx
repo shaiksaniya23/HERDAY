@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { supabase } from "@/app/lib/supabaseClient";
 
 const SETTINGS_KEY = "herday-settings";
 const PLANS_KEY = "herday-plans";
@@ -195,26 +196,55 @@ export default function SettingsPage() {
      CLEAR ALL DATA
      ========================================= */
 
-  const clearAllData = () => {
-    localStorage.removeItem(
-      PLANS_KEY
+  const clearAllData = async () => {
+    setNotificationMessage("");
+
+    const { data: { user } } =
+      await supabase.auth.getUser();
+
+    if (!user) {
+      setNotificationMessage(
+        "Please sign in again before clearing your data."
+      );
+      return;
+    }
+
+    const { error } = await supabase
+      .from("plans")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.error(
+        "HERDAY clear data error:",
+        error
+      );
+
+      setNotificationMessage(
+        `Could not clear your plans: ${error.message}`
+      );
+      return;
+    }
+
+    localStorage.removeItem(PLANS_KEY);
+    localStorage.removeItem(SETTINGS_KEY);
+
+    // Tell any open HERDAY page to reload from Supabase.
+    window.dispatchEvent(
+      new Event("herday-data-cleared")
     );
 
-    localStorage.removeItem(
-      SETTINGS_KEY
-    );
-
-    setSettings(
-      defaultSettings
-    );
-
+    setSettings(defaultSettings);
     setShowClearConfirm(false);
-
     setSaved(true);
 
     setTimeout(() => {
       setSaved(false);
     }, 1500);
+
+    setNotificationMessage(
+      "Your HERDAY plans and settings were cleared."
+    );
   };
 
   return (
@@ -692,8 +722,8 @@ export default function SettingsPage() {
                 </strong>
 
                 <span>
-                  Your plans and settings are
-                  currently stored in this browser.
+                  Your plans are saved to your HERDAY
+                  account, and settings are saved here.
                 </span>
 
               </div>
@@ -794,8 +824,8 @@ export default function SettingsPage() {
 
             <p>
               This will permanently remove
-              your plans, tasks and HERDAY
-              settings from this browser.
+              your plans, applications, tasks, deadlines
+              and HERDAY settings for this account.
             </p>
 
             <div className="confirm-actions">
