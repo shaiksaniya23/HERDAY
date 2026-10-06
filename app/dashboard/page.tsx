@@ -1486,8 +1486,32 @@ export default function Dashboard() {
                         e.target.value
                       )
                     }
+                    step="60"
+                    lang="en-IN"
                     required
                   />
+
+                  {form.deadlineTime && (
+                    <small
+                      style={{
+                        display: "block",
+                        marginTop: "6px",
+                        color: "#306D29",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {new Date(
+                        `1970-01-01T${form.deadlineTime}`
+                      ).toLocaleTimeString("en-IN", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                      {" • 24-hour: "}
+                      {form.deadlineTime}
+                    </small>
+                  )}
 
                 </label>
 
