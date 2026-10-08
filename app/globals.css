@@ -3649,3 +3649,54 @@ a:active,
     padding-left: 22px;
   }
 }
+/* =========================================
+   HERDAY NOTIFICATION CONTROL
+   ========================================= */
+
+   .notification-control {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+    margin-left: auto;
+  }
+  
+  .notification-button {
+    border: 1px solid #306D29;
+    background: transparent;
+    color: #306D29;
+    border-radius: 999px;
+    padding: 8px 13px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+  }
+  
+  .notification-button:hover {
+    background: #306D29;
+    color: #FBF5DD;
+  }
+  
+  .notification-button:disabled {
+    cursor: default;
+  }
+  
+  .notification-enabled {
+    background: #306D29;
+    color: #FBF5DD;
+  }
+  
+  .notification-bell {
+    margin-right: 5px;
+  }
+  
+  .notification-status {
+    color: #306D29;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+  }

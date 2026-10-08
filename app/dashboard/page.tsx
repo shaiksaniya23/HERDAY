@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/app/lib/supabaseClient";
+import NotificationButton from "@/app/NotificationButton";
 
 type PlanTask = {
   id: string;
@@ -889,15 +890,23 @@ export default function Dashboard() {
 
           </div>
 
-          <button
-            className="header-add-button"
-            onClick={
-              openPlanForm
-            }
-          >
-            <span>＋</span>
-            Add Plan
-          </button>
+          <div className="dashboard-header-actions">
+
+            <button
+              className="header-add-button"
+              onClick={
+                openPlanForm
+              }
+            >
+              <span>＋</span>
+              Add Plan
+            </button>
+
+            <div className="dashboard-notification-wrapper">
+              <NotificationButton />
+            </div>
+
+          </div>
 
         </header>
 
@@ -1486,32 +1495,8 @@ export default function Dashboard() {
                         e.target.value
                       )
                     }
-                    step="60"
-                    lang="en-IN"
                     required
                   />
-
-                  {form.deadlineTime && (
-                    <small
-                      style={{
-                        display: "block",
-                        marginTop: "6px",
-                        color: "#306D29",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {new Date(
-                        `1970-01-01T${form.deadlineTime}`
-                      ).toLocaleTimeString("en-IN", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        hour12: true,
-                      })}
-                      {" • 24-hour: "}
-                      {form.deadlineTime}
-                    </small>
-                  )}
 
                 </label>
 
@@ -1712,6 +1697,94 @@ export default function Dashboard() {
         </div>
 
       )}
+
+      <style jsx global>{`
+        .dashboard-header-actions {
+          display: flex;
+          align-items: flex-start;
+          justify-content: flex-end;
+          gap: 12px;
+          margin-left: auto;
+          flex-shrink: 0;
+        }
+
+        .dashboard-notification-wrapper {
+          display: flex;
+          align-items: flex-start;
+          justify-content: flex-end;
+          min-width: 0;
+        }
+
+        .dashboard-notification-wrapper .notification-control {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 4px;
+          margin: 0;
+          width: auto;
+        }
+
+        .dashboard-notification-wrapper .notification-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: auto;
+          min-width: 0;
+          height: 38px;
+          padding: 0 13px;
+          border: 1px solid #306D29;
+          border-radius: 999px;
+          background: transparent;
+          color: #306D29;
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1;
+          white-space: nowrap;
+          cursor: pointer;
+          box-shadow: none;
+          transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .dashboard-notification-wrapper .notification-button:hover {
+          background: #306D29;
+          color: #FBF5DD;
+        }
+
+        .dashboard-notification-wrapper .notification-button:disabled {
+          cursor: default;
+          opacity: 1;
+        }
+
+        .dashboard-notification-wrapper .notification-status {
+          margin: 0;
+          color: #306D29;
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1.2;
+          text-align: right;
+          white-space: nowrap;
+        }
+
+        .dashboard-notification-wrapper .notification-bell {
+          margin-right: 5px;
+        }
+
+        @media (max-width: 760px) {
+          .dashboard-header-actions {
+            width: 100%;
+            justify-content: space-between;
+            gap: 8px;
+            margin-left: 0;
+            margin-top: 12px;
+          }
+
+          .dashboard-notification-wrapper .notification-button {
+            height: 36px;
+            padding: 0 10px;
+            font-size: 11px;
+          }
+        }
+      `}</style>
 
     </main>
   );
